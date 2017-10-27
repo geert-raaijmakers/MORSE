@@ -8,14 +8,15 @@ import traceback
 import logging
 import gc
 import time
+
 from constants import c, G, Msun, rho_0, rho_ns, rho_1, rho_2, rho_3, P_0, gamma_0, dyncm2_to_MeVfm3, gcm3_to_MeVfm3, oneoverfm_MeV
 import numpy
+from tqdm import tqdm, trange
 import itertools
 from scipy.constants import pi
 from scipy.interpolate import interp1d, UnivariateSpline
 from scipy.signal import argrelextrema
 from scipy.integrate import odeint
-import cPickle as pickle
 from matplotlib import pyplot
 
 def crust_EOS():
@@ -231,12 +232,7 @@ def tovsolve(rhocent, P_1, P_2, P_3, eos_crust, inveos_crust, P_min):
     M_max = psol[index][1]/Msun
     R_max = r[index]/100000
     I = MomentInertia(psol[:,0][indices[0]], psol[:,1][indices[0]], r[indices[0]], P_min)    
-    
-    causal = 3.*G*M_max*Msun/c**2.
-    if R_max*100000 < causal:
-        M_max = 0.
-        R_max = 0.
-    
+       
     return M_max, R_max, I
 
 
@@ -253,6 +249,8 @@ def calculate_MR(logrhomin, logrhomax, n, P_1, P_2, P_3, eos_crust, inveos_crust
     Returns:
         Masses (array)   : An array of length 'n' with the masses of the neutron stars. 
         Radii (array)    : An array of length 'n' with the radii of the neutron stars. 
+        Inert (array)    : An array of length 'n' with the moments of inertia of the stars.
+        rhocent (array)  : An array of length 'n' with the central densities of each star.
     """
     
     rhocent = numpy.logspace(logrhomin, logrhomax, n)
@@ -266,11 +264,11 @@ def calculate_MR(logrhomin, logrhomax, n, P_1, P_2, P_3, eos_crust, inveos_crust
     Radii = numpy.array(Radii)
     Inert = numpy.array(Inert)
     
-    Masses = Masses[Masses>0.]
-    Radii = Radii[Radii>0.]
-    Inert = Inert[Inert>0.]
+    #Masses = Masses[Masses>0.]
+    #Radii = Radii[Radii>0.]
+    #Inert = Inert[Inert>0.]
 
-    return Masses, Radii, Inert
+    return Masses, Radii, Inert, rhocent
     
     
 def MomentInertia(P, M, r, P_min):
@@ -361,13 +359,14 @@ def calculate_MR_all(parameters, eos_crust, inveos_crust, logrhomin=14.4, logrho
 
     Returns:
         MRIcurves (ndarray)       : An array of length (EoS) with for each EoS an array of masses, 
-                                    radii and moments of inertia. 
+                                    radii, moments of inertia and the corresponding central densities. 
         Parameters (ndarray)      : An array of length (EoS) with the parameters for which the TOV 
                                     equations generated stable mass-radius curves. 
     """
            
     MR_curves = []
     Error_params = []
+    #with tqdm(total=len(parameters),position=task, desc='Process %2d' %(task)) as pbar:
     for j in range(len(parameters)):
       
         P_1 = parameters[j,0]
@@ -376,9 +375,9 @@ def calculate_MR_all(parameters, eos_crust, inveos_crust, logrhomin=14.4, logrho
 
         try:
             if isinstance(logrhomax, float):
-                masses, radii, inert = calculate_MR(logrhomin, logrhomax, n, P_1, P_2, P_3, eos_crust, inveos_crust, P_min)
+                masses, radii, inert, rhocent = calculate_MR(logrhomin, logrhomax, n, P_1, P_2, P_3, eos_crust, inveos_crust, P_min)
             else:
-                masses, radii, inert = calculate_MR(logrhomin, logrhomax[j], n, P_1, P_2, P_3, eos_crust, inveos_crust, P_min)
+                masses, radii, inert, rhocent = calculate_MR(logrhomin, logrhomax[j], n, P_1, P_2, P_3, eos_crust, inveos_crust, P_min)
 
         except UnboundLocalError:
             Error_params.append(j)
@@ -394,17 +393,18 @@ def calculate_MR_all(parameters, eos_crust, inveos_crust, logrhomin=14.4, logrho
             
             if not len(locmax)==0:
             
-                if locmax < len(masses)-1:      #check to see if there is a sharp kink in the MR-curve
-                    right = argrelextrema(masses, numpy.greater)[0] + 1
-                    left = argrelextrema(masses, numpy.greater)[0] - 1
+                if locmax[0] < len(masses)-1:      #check to see if there is a sharp kink in the MR-curve
+                    right = locmax[0] + 1
+                    left = locmax[0] - 1
                     if abs(radii[right]-radii[left]) < 0.12:
                         Error_params.append(j)
                         continue
                 
-                MR_curves.append([masses[0:locmax[0]+1], radii[0:locmax[0]+1], inert[0:locmax[0]+1]])
+                MR_curves.append([masses[0:locmax[0]+1], radii[0:locmax[0]+1], inert[0:locmax[0]+1], rhocent[0:locmax[0]+1]])
                
             else:
-                MR_curves.append([masses, radii, inert])            
+                MR_curves.append([masses, radii, inert, rhocent])      
+            #pbar.update(1)
     MR_curves = numpy.array(MR_curves)
     Error_params = numpy.array(Error_params)
     Parameters = numpy.delete(parameters, Error_params, axis=0)
@@ -415,7 +415,7 @@ def main(parameters, maxrho):
     logger = mp.log_to_stderr()
     logger.setLevel(logging.INFO)
 
-    nproc = mp.cpu_count()# - 1
+    nproc = mp.cpu_count() - 1
     nproc = max(1, nproc)
     
     print len(parameters)
@@ -428,7 +428,7 @@ def main(parameters, maxrho):
     
     input_q = mp.Queue()
     output_q = mp.Queue()
-          
+        
     procs = [ mp.Process(target=worker, args=(input_q,output_q)) for i in xrange(nproc)]
     
     for i in xrange(ntasks):
@@ -445,34 +445,27 @@ def main(parameters, maxrho):
         result.append(output_q.get())
         ntasks -= 1 
             
-      
     for p in procs:
         p.join()
         
-    result = numpy.array(sorted(result, key=lambda x: x[1]))
-    result = numpy.delete(result, 1, axis=1)
+    result = numpy.array(sorted(result, key=lambda x: x[2]))
+    result = numpy.delete(result, 2, axis=1)
 
     MRcurves = []
     Parameters = []
 
     for i in xrange(nproc):
-        if not result[i][0]:
-            continue
         for j in range(len(result[i][0])):
             Parameters.append(div_par[i][j])
-            MRcurves.append([numpy.array(result[i][0][j][0]), numpy.array(result[i][0][j][1]), numpy.array(result[i][0][j][2])])
+            MRcurves.append([numpy.array(result[i][0][j][0]), numpy.array(result[i][0][j][1]), 
+                             numpy.array(result[i][0][j][2]), numpy.array(result[i][0][j][3])])
     
     Parameters = numpy.array(Parameters)
     MRcurves = numpy.array(MRcurves)
 
     numpy.save('Parameters', Parameters)
-    numpy.save('MRIcurves', MRcurves)
-    fig, ax = pyplot.subplots(1,1)
-    for i in range(len(MRcurves)):
-        M, R, I = MRcurves[i]
-        ax.plot(R, M, c='blue')
-    pyplot.show()
-  
+    numpy.save('MRIrhocurves', MRcurves)
+
 
 def worker(input_q, output_q):
     
@@ -487,51 +480,9 @@ def worker(input_q, output_q):
             
             eos_crust, inveos_crust, P_min = crust_EOS()
 
-            Error_params = []
-            MR_curves = []
-
-            for j in range(len(parameters)):
-              
-                P_1 = parameters[j,0]
-                P_2 = parameters[j,1]
-                P_3 = parameters[j,2]
-
-                try:
-                    masses, radii, inert = calculate_MR(14.4, maxrho[j], 80, P_1, P_2, P_3, eos_crust, inveos_crust, P_min)
-
-                except UnboundLocalError:
-                    Error_params.append(j)
-                    #info('UnboundLocalError')
-                    continue
-                
-                else:
-                
-                    locmin = argrelextrema(masses, numpy.less)[0]  #Check for EOS with local minima
+            MR_curves, Parameters = calculate_MR_all(parameters, eos_crust, inveos_crust, task, logrhomax=maxrho, n=80, P_min=P_min)
                     
-                    if not len(locmin)==0:
-                        Error_params.append(j)
-                        #print 'Found a local minimum' 
-                        continue
-                
-                    locmax = argrelextrema(masses, numpy.greater)[0]
-                    
-                    if not len(locmax)==0:
-                    
-                        if locmax < len(masses)-1:      #check to see if there is a sharp kink in the MR-curve
-                            right = argrelextrema(masses, numpy.greater)[0] + 1
-                            left = argrelextrema(masses, numpy.greater)[0] - 1
-                            if abs(radii[right]-radii[left]) < 0.12:
-                                Error_params.append(j)
-                                #print 'Found a sharp kink' 
-                                continue
-                        
-                        MR_curves.append([masses[0:locmax[0]+1], radii[0:locmax[0]+1], inert[0:locmax[0]+1]])
-                        #MR_curves.append([masses, radii])        
-                        
-                    else:
-                        MR_curves.append([masses, radii, inert])        
-                    
-            output_q.put([MR_curves, task])
+            output_q.put([MR_curves, Parameters, task])
             
         except Exception as exception:
             trace = str(traceback.format_exc())
@@ -540,9 +491,7 @@ def worker(input_q, output_q):
     info(end)
     
     return    
-        
-  
-    
+ 
 
 if __name__ == '__main__':
   

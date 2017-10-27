@@ -17,24 +17,28 @@ import multiprocessing
 import itertools
 from constants import c, G, Msun, rho_0, rho_ns, rho_1, rho_2, rho_3, P_0
 
-def generate_params(n, low_lim=0.5, up_lim=6.5):
+def generate_params(n, low_gamma=0.5, high_gamma=6.5, Plow=[33.5, 34.5, 35.], Phigh=[34.8, 36., 37.]):
     """
     Generates an array of combinations of P1, P2 and P3, making sure that P3 > P2 > P1. 
     It also sets a lower and upper limit on the polytropic index.
     
     Args:
         n (int)        : The number of points in logspace for each parameter.
-        low_lim (float): The lower limit on the polytropic index, default is 0.5.
-        up_lim (float) : The upper limit on the polytropic index, default is 6.5.
+        low_gamma (float): The lower limit on the polytropic index, default is 0.5.
+        high_gamma (float): The upper limit on the polytropic index, default is 6.5.
+        Plow (array)      : Array of the three lower limits for P1, P2 and P3 in log10, 
+                            default is [33.5, 34.5, 35.].
+        Phigh (array)     : Array of the three upper limits for P1, P2 and P3 in log10, 
+                            default is [34.8, 36., 37.].
 
     Returns:
         out (ndarray)  : Returns an array with all the possible combinations of P1, P2, P3.
     """
     
     excluded = []
-    P_1 = numpy.logspace(33.5, 34.8, n)
-    P_2 = numpy.logspace(34.5, 36., n)
-    P_3 = numpy.logspace(35, 37, n)
+    P_1 = numpy.logspace(Plow[0], Phigh[0], n)
+    P_2 = numpy.logspace(Plow[1], Phigh[1], n)
+    P_3 = numpy.logspace(Plow[2], Phigh[2], n)
     
     #P_1 = numpy.linspace(10**33.5, 10**34.8, n)
     #P_2 = numpy.linspace(10**34.5, 10**36., n)
@@ -58,7 +62,7 @@ def generate_params(n, low_lim=0.5, up_lim=6.5):
         gamma_2 = numpy.log10(P_2/P_1) / numpy.log10(rho_2/rho_1)
         gamma_3 = numpy.log10(P_3/P_2) / numpy.log10(rho_3/rho_2)
 
-        if not low_lim <= gamma_1 <= up_lim or not low_lim <= gamma_2 <= up_lim or not low_lim <= gamma_3 <= up_lim:
+        if not low_gamma <= gamma_1 <= high_gamma or not low_gamma <= gamma_2 <= high_gamma or not low_gamma <= gamma_3 <= high_gamma:
             excluded.append(i)
     
     permutations = numpy.delete(permutations, excluded, axis=0)    
@@ -161,6 +165,7 @@ def calc_maxrho(parameters, n=1000, low_lim=14.31, up_lim=16.5):
     max_rho = numpy.array(max_rho) 
     return max_rho        
 
+
 info = mp.get_logger().info
 def main(n, low_lim, up_lim):
     logger = mp.log_to_stderr()
@@ -179,7 +184,8 @@ def main(n, low_lim, up_lim):
     
     input_q = mp.Queue()
     output_q = mp.Queue()
-          
+
+        
     procs = [ mp.Process(target=worker, args=(input_q,output_q)) for i in xrange(nproc)]
     
     for i in xrange(ntasks):
@@ -195,7 +201,7 @@ def main(n, low_lim, up_lim):
     while ntasks > 0:
         result.append(output_q.get())
         ntasks -= 1 
-            
+
     for p in procs:
         p.join()
 
@@ -233,7 +239,7 @@ def worker(input_q, output_q):
 
 if __name__ == '__main__':
   
-    main(4, 1.0, 5.0)
+    main(15, 1., 5.5)
     
 
 
