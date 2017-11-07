@@ -239,7 +239,7 @@ def worker(input_q, output_q):
 
 if __name__ == '__main__':
   
-    main(15, 1., 5.5)
+    main(4, 0.5, 6.5)
     
 
 
