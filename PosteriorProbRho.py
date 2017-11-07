@@ -8,13 +8,10 @@ import traceback
 import logging
 import gc
 import numpy 
-import pickle
 from matplotlib import pyplot
 from argparse import ArgumentParser
-from scipy.interpolate import UnivariateSpline, Rbf, interpn, griddata, RegularGridInterpolator
+from scipy.interpolate import UnivariateSpline, RegularGridInterpolator
 from scipy.integrate import simps, dblquad
-import numpy.polynomial.polynomial as poly
-import itertools
 import time
 from constants import G, Msun, c
 
