@@ -15,3 +15,10 @@ The "-n 20" means that for each of the EoS parameters, 20 different values are c
 
 This will create the mass-radius curves and the corresponding parameters and saves them as "MRIcurves20.npy" and     "Parameters20.npy" respectively.
   
+- python JacobianRho.py -f JacobianRho20 -i1 MRIcurves20.npy -i2 Parameters20.npy
+
+This will calculate the Jacobian using the files "MRIcurves20.npy" and "Parameters20.npy". The Jacobian is saved as "JacobianRho20.npy".
+
+- python PosteriorProbRho.py -f ProbFPS -i1 MRIcurves20.npy -i2 JacobianRho20.npy -i3 auxfiles/ObservablesFPS.npy
+
+This will calculate the posterior distribution on the EoS parameters and save it as "ProbFPS.npy". The input posterior on masses and radii is given by the file "ObservablesFPS.npy". 
