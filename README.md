@@ -8,7 +8,10 @@ In the "Example" Ipython Notebook we show how to use MORSE to calculate mass, ra
 
 To infer a posterior distribution on EoS parameters, the following codes have to be executed: 
 - python Generate_Params_Par.py -n 20 
-  The "-n 20" means that for each of the EoS parameters, 20 different values are calculated. 
+
+The "-n 20" means that for each of the EoS parameters, 20 different values are calculated. 
+
 - python Create_MRcurves_Par.py -f1 MRIcurves20 -f2 Parameters20
-  This will create the mass-radius curves and the corresponding parameters and saves them as "MRIcurves20.npy" and     "Parameters20.npy" respectively.
+
+This will create the mass-radius curves and the corresponding parameters and saves them as "MRIcurves20.npy" and     "Parameters20.npy" respectively.
   
