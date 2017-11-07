@@ -11,6 +11,7 @@ import time
 
 from constants import c, G, Msun, rho_0, rho_ns, rho_1, rho_2, rho_3, P_0, gamma_0, dyncm2_to_MeVfm3, gcm3_to_MeVfm3, oneoverfm_MeV
 import numpy
+from argparse import ArgumentParser
 from tqdm import tqdm, trange
 import itertools
 from scipy.constants import pi
@@ -450,7 +451,7 @@ def calculate_MR_all(parameters, eos_crust, inveos_crust, task=0, logrhomin=14.4
     return MR_curves, Parameters
 
 #info = mp.get_logger().info
-def main(parameters, maxrho):
+def main(parameters, maxrho, outputMR, outputPs):
     #logger = mp.log_to_stderr()
     #logger.setLevel(logging.INFO)
 
@@ -503,8 +504,8 @@ def main(parameters, maxrho):
     Parameters = numpy.array(Parameters)
     MRcurves = numpy.array(MRcurves)
 
-    numpy.save('Parameters4', Parameters)
-    numpy.save('MRIRhocurves4', MRcurves)
+    numpy.save(outputPs, Parameters)
+    numpy.save(outputMR, MRcurves)
 
 
 def worker(input_q, output_q):
@@ -535,12 +536,16 @@ def worker(input_q, output_q):
 
 if __name__ == '__main__':
   
-  
+    parser = ArgumentParser()  
+    parser.add_argument("-f1", dest="OutputFileMR", help="write MRIcurves to FILE", metavar="FILE", required=True)
+    parser.add_argument("-f2", dest="OutputFileParams", help="write parameters to FILE", metavar="FILE", required=True)
+    args = parser.parse_args()  
+    
     parameters = numpy.load('input_parameters.npy')
     maxrho = numpy.load('max_rho.npy')
     maxrho = numpy.log10(maxrho)
 
-    main(parameters, maxrho)
+    main(parameters, maxrho, args.OutputFileMR, args.OutputFileParams)
     
 
 

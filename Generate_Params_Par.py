@@ -9,6 +9,7 @@ import logging
 import gc
 import time
 
+from argparse import ArgumentParser
 import numpy
 from matplotlib import pyplot
 #from joblib import Parallel, delayed
@@ -238,8 +239,13 @@ def worker(input_q, output_q):
     
 
 if __name__ == '__main__':
+
+    parser = ArgumentParser()
+    parser.add_argument("-n", dest="number", help="Number of values for each parameter", required=True)                        
+    
+    args = parser.parse_args()  
   
-    main(4, 0.5, 6.5)
+    main(args.number, 0.5, 6.5)
     
 
 
