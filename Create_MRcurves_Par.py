@@ -19,6 +19,18 @@ from scipy.signal import argrelextrema
 from scipy.integrate import odeint
 from matplotlib import pyplot
 
+def print_progressbar(i, N):
+    pbwidth = 42
+
+    progress = float(i)/N
+    block = int(round(pbwidth*progress))
+    text = "\rProgress: [{0}] {1:.1f}%".format( "#"*block + "-"*(pbwidth-block), progress*100)
+    sys.stdout.write(text)
+    sys.stdout.flush()
+
+    if i == (N-1):
+        print " .. done"
+
 def crust_EOS():
     """ 
     Interpolates the SLy EOS to use for the crust and calculates the minimum pressure. 
@@ -28,7 +40,7 @@ def crust_EOS():
         Inverse EOS (function): A function of pressure representing the EOS
         P_min (float): The minimum pressure that is tabulated.
     """
-    Pmin = 0.1
+    Pmin = 1e2
     Pmax = SLYfit(14.3)
     rhotest = numpy.logspace(6, 16, 300)
     prestest = 10**SLYfit(numpy.log10(rhotest))
@@ -54,7 +66,19 @@ def SLYfit(rho):
     return part1+part2+part3+part4
 
 def eos(rho, P_1, P_2, P_3, eos_crust):
-
+    """
+    The parameterized EOS.
+    
+    Args:
+        rho (float): The density at which to evaluate the EOS in g/cm^3.
+        P_1 (float): The first pressure parameter of the parameterization.
+        P_2 (float): The second pressure parameter of the parameterization.
+        P_3 (float): The third pressure parameter of the parameterization.
+        eos_crust (function): The EOS for the low-density part, which inputs a mass density and returns a pressure.
+    Returns:
+        rho (float): The rest-mass density in g/cm^3.
+        epsilon (float): The energy density in g/cm^3
+    """
     rho_ns = 2.7e14
     rho_1 = 1.85 * rho_ns 
     rho_2 = 2. * rho_1 
@@ -107,16 +131,16 @@ def inveos(pres, P_1, P_2, P_3, eos_crust, inveos_crust, P_min):
     The inverse of the parameterized EOS.
     
     Args:
-        pres (float): The pressure at which to evaluate the inverse EOS in dyn/cm^2.
-        P_1 (float): The first pressure parameter of the parameterization.
-        P_2 (float): The second pressure parameter of the parameterization.
-        P_3 (float): The third pressure parameter of the parameterization.
-        eos_crust (function): The EOS for the low-density part, which inputs a pressure and returns a mass density.
-        inveos_crust (function): The inverse EOS for the low density part, which inputs a mass density and returns a pressure.
-        P_min (float): The minimum pressure for which the low-density EOS function is defined.
+        pres (float)            : The pressure at which to evaluate the inverse EOS in dyn/cm^2.
+        P_1 (float)             : The first pressure parameter of the parameterization.
+        P_2 (float)             : The second pressure parameter of the parameterization.
+        P_3 (float)             : The third pressure parameter of the parameterization.
+        eos_crust (function)    : The EOS for the low-density part, which inputs a mass density and returns a pressure.
+        inveos_crust (function) : The inverse EOS for the low density part, which inputs a pressure and returns a mass density.
+        P_min (float)           : The minimum pressure for which the low-density EOS function is defined.
     Returns:
-        rho (float): The rest-mass density in g/cm^3.
-        epsilon (float): The energy density in g/cm^3
+        rho (float)     : The rest-mass density in g/cm^3.
+        epsilon (float) : The energy density in g/cm^3
     """
       
     gamma_1 = numpy.log10(P_1/P_0) / numpy.log10(rho_1/rho_0)
@@ -177,8 +201,8 @@ def f(initial, r, P_1, P_2, P_3, eos_crust, inveos_crust, P_min):
         P_1 (float)            : The first pressure parameter of the parameterization.
         P_2 (float)            : The second pressure parameter of the parameterization.
         P_3 (float)            : The third pressure parameter of the parameterization.
-        eos_crust (function)   : The EOS for the low-density part, which inputs a pressure and returns a mass density.
-        inveos_crust (function): The inverse EOS for the low density part, which inputs a mass density and returns a pressure.
+        eos_crust (function)   : The EOS for the low-density part, which inputs a mass density and returns a pressure.
+        inveos_crust (function): The inverse EOS for the low density part, which inputs a pressure and returns a mass density.
         P_min (float)          : The minimum pressure for which the low-density EOS function is defined.
     Returns:
         dpdr (float)           : The derivative of the pressure with respect to the radial coordinate.
@@ -208,8 +232,14 @@ def tovsolve(rhocent, P_1, P_2, P_3, eos_crust, inveos_crust, P_min):
     Solves the TOV-equations using scipy's 'odeint' package. 
     
     Args:
-        rhocent (float): The central density of the neutron star. This is the starting
-                         value of the differential integration.
+        rhocent (float)        : The central density of the neutron star. This is the starting
+                                 value of the differential integration.
+        P_1 (float)            : The first pressure parameter of the parameterization.
+        P_2 (float)            : The second pressure parameter of the parameterization.
+        P_3 (float)            : The third pressure parameter of the parameterization.
+        eos_crust (function)   : The EOS for the low-density part, which inputs a mass density and returns a pressure.
+        inveos_crust (function): The inverse EOS for the low density part, which inputs a pressure and returns a mass density.
+        P_min (float)          : The minimum pressure for which the low-density EOS function is defined.
 
     Returns:
         M (float)      : The mass of the neutron star. 
@@ -242,9 +272,15 @@ def calculate_MR(logrhomin, logrhomax, n, P_1, P_2, P_3, eos_crust, inveos_crust
     Calculate a mass-radius curve by solving the TOV-equations for different central densities.
 
     Args:
-        logrhomin (float): The lower limit of the central density in log(g/cm^3).
-        logrhomax (float): The upper limit of the central density in log(g/cm^3), based on causality. 
-        n (int)          : The number of points used in logspace to create the MR-curve.
+        logrhomin (float)      : The lower limit of the central density in log(g/cm^3).
+        logrhomax (float)      : The upper limit of the central density in log(g/cm^3), based on causality. 
+        n (int)                : The number of points used in logspace to create the MR-curve.
+        P_1 (float)            : The first pressure parameter of the parameterization.
+        P_2 (float)            : The second pressure parameter of the parameterization.
+        P_3 (float)            : The third pressure parameter of the parameterization.
+        eos_crust (function)   : The EOS for the low-density part, which inputs a mass density and returns a pressure.
+        inveos_crust (function): The inverse EOS for the low density part, which inputs a pressure and returns a mass density.
+        P_min (float)          : The minimum pressure for which the low-density EOS function is defined.
 
     Returns:
         Masses (array)   : An array of length 'n' with the masses of the neutron stars. 
@@ -339,12 +375,16 @@ def omega(initial, r, curvej, derivj):
 def Inertia(r, derivj, curvew, W):
     return -r**3. * derivj(r)*curvew(r)/W
 
-def calculate_MR_all(parameters, eos_crust, inveos_crust, logrhomin=14.4, logrhomax=16.0, n=100, P_min=0.0):
+def calculate_MR_all(parameters, eos_crust, inveos_crust, task=0, logrhomin=14.4, logrhomax=16.5, n=100, P_min=0.0):
     """
     Calculate the masses, radii and moments of inertia for all input parameters by solving the TOV-equations 
     for different central densities.
 
     Args:
+        parameters                : The array of parameters for which to solve the TOV-equations.
+        eos_crust (function)      : The EOS for the low-density part, which inputs a pressure and returns a mass density.
+        inveos_crust (function)   : The inverse EOS for the low density part, which inputs a mass density and returns a pressure.
+        task                      : At which line to print the progressbar, default is 0.
         logrhomin (float)         : The lower limit of the central density in log(g/cm^3), default is 14.4.
         logrhomax (float or array): The upper limits of the central density in log(g/cm^3), based on causality. 
                                     If float, the same value for all EoSs is used, if array, every entry should
@@ -366,54 +406,53 @@ def calculate_MR_all(parameters, eos_crust, inveos_crust, logrhomin=14.4, logrho
            
     MR_curves = []
     Error_params = []
-    #with tqdm(total=len(parameters),position=task, desc='Process %2d' %(task)) as pbar:
-    for j in range(len(parameters)):
-      
-        P_1 = parameters[j,0]
-        P_2 = parameters[j,1]
-        P_3 = parameters[j,2]
+    with tqdm(total=len(parameters), position=task, desc='Process %d' %(task), leave=False) as pbar:
+        for j in range(len(parameters)):
+            P_1 = parameters[j,0]
+            P_2 = parameters[j,1]
+            P_3 = parameters[j,2]
 
-        try:
-            if isinstance(logrhomax, float):
-                masses, radii, inert, rhocent = calculate_MR(logrhomin, logrhomax, n, P_1, P_2, P_3, eos_crust, inveos_crust, P_min)
-            else:
-                masses, radii, inert, rhocent = calculate_MR(logrhomin, logrhomax[j], n, P_1, P_2, P_3, eos_crust, inveos_crust, P_min)
-
-        except UnboundLocalError:
-            Error_params.append(j)
-            continue
-        
-        else:     
-            locmin = argrelextrema(masses, numpy.less)[0]  #Check for EOS with local minima         
-            if not len(locmin)==0:
+            try:
+                if isinstance(logrhomax, float):
+                    masses, radii, inert, rhocent = calculate_MR(logrhomin, logrhomax, n, P_1, P_2, P_3, eos_crust, inveos_crust, P_min)
+                else:
+                    masses, radii, inert, rhocent = calculate_MR(logrhomin, logrhomax[j], n, P_1, P_2, P_3, eos_crust, inveos_crust, P_min)
+                pbar.update(1)
+            except UnboundLocalError:
                 Error_params.append(j)
                 continue
-        
-            locmax = argrelextrema(masses, numpy.greater)[0]
             
-            if not len(locmax)==0:
+            else:     
+                locmin = argrelextrema(masses, numpy.less)[0]  #Check for EOS with local minima         
+                if not len(locmin)==0:
+                    Error_params.append(j)
+                    continue
             
-                if locmax[0] < len(masses)-1:      #check to see if there is a sharp kink in the MR-curve
-                    right = locmax[0] + 1
-                    left = locmax[0] - 1
-                    if abs(radii[right]-radii[left]) < 0.12:
-                        Error_params.append(j)
-                        continue
+                locmax = argrelextrema(masses, numpy.greater)[0]
                 
-                MR_curves.append([masses[0:locmax[0]+1], radii[0:locmax[0]+1], inert[0:locmax[0]+1], rhocent[0:locmax[0]+1]])
-               
-            else:
-                MR_curves.append([masses, radii, inert, rhocent])      
-            #pbar.update(1)
+                if not len(locmax)==0:
+                
+                    if locmax[0] < len(masses)-1:      #check to see if there is a sharp kink in the MR-curve
+                        right = locmax[0] + 1
+                        left = locmax[0] - 1
+                        if abs(radii[right]-radii[left]) < 0.12:
+                            Error_params.append(j)
+                            continue
+                    
+                    MR_curves.append([masses[0:locmax[0]+1], radii[0:locmax[0]+1], inert[0:locmax[0]+1], rhocent[0:locmax[0]+1]])
+                   
+                else:
+                    MR_curves.append([masses, radii, inert, rhocent])
+                    
     MR_curves = numpy.array(MR_curves)
     Error_params = numpy.array(Error_params)
     Parameters = numpy.delete(parameters, Error_params, axis=0)
     return MR_curves, Parameters
 
-info = mp.get_logger().info
+#info = mp.get_logger().info
 def main(parameters, maxrho):
-    logger = mp.log_to_stderr()
-    logger.setLevel(logging.INFO)
+    #logger = mp.log_to_stderr()
+    #logger.setLevel(logging.INFO)
 
     nproc = mp.cpu_count() - 1
     nproc = max(1, nproc)
@@ -428,18 +467,19 @@ def main(parameters, maxrho):
     
     input_q = mp.Queue()
     output_q = mp.Queue()
-        
+
     procs = [ mp.Process(target=worker, args=(input_q,output_q)) for i in xrange(nproc)]
-    
+          
     for i in xrange(ntasks):
         input_q.put(inputs[i])
-    
+
     for i in xrange(nproc):
         input_q.put('STOP')
     
     for p in procs:
         p.start()
-    
+        
+
     result = []
     while ntasks > 0:
         result.append(output_q.get())
@@ -456,15 +496,15 @@ def main(parameters, maxrho):
 
     for i in xrange(nproc):
         for j in range(len(result[i][0])):
-            Parameters.append(div_par[i][j])
+            Parameters.append(result[i][1][j])
             MRcurves.append([numpy.array(result[i][0][j][0]), numpy.array(result[i][0][j][1]), 
                              numpy.array(result[i][0][j][2]), numpy.array(result[i][0][j][3])])
     
     Parameters = numpy.array(Parameters)
     MRcurves = numpy.array(MRcurves)
 
-    numpy.save('Parameters', Parameters)
-    numpy.save('MRIrhocurves', MRcurves)
+    numpy.save('Parameters4', Parameters)
+    numpy.save('MRIRhocurves4', MRcurves)
 
 
 def worker(input_q, output_q):
@@ -480,15 +520,15 @@ def worker(input_q, output_q):
             
             eos_crust, inveos_crust, P_min = crust_EOS()
 
-            MR_curves, Parameters = calculate_MR_all(parameters, eos_crust, inveos_crust, task, logrhomax=maxrho, n=80, P_min=P_min)
+            MR_curves, Parameters = calculate_MR_all(parameters, eos_crust, inveos_crust, task, logrhomax=maxrho, n=30, P_min=P_min)
                     
             output_q.put([MR_curves, Parameters, task])
             
         except Exception as exception:
             trace = str(traceback.format_exc())
-            info(trace)
-    end = (time.clock() - start)
-    info(end)
+            #info(trace)
+    #end = (time.clock() - start)
+    #info(end)
     
     return    
  
